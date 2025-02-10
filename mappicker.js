@@ -11,21 +11,40 @@
      * @param {Object} options - Opsi konfigurasi.
      * @param {string} options.mapboxAccessToken - Mapbox access token (wajib).
      * @param {Object} [options.defaultLocation] - Koordinat default { lng: Number, lat: Number }.
-     * @returns {Promise} - Promise yang akan resolve dengan koordinat terpilih.
+     * @param {string} [options.title] - Judul modal. Default "Pilih Lokasi".
+     * @param {string} [options.saveButtonText] - Teks pada tombol simpan. Default "Simpan Lokasi".
+     * @param {string} [options.hintText] - Teks petunjuk di bagian bawah peta. Default "Klik di peta atau geser marker untuk memilih lokasi".
+     * @param {string} [options.mapTheme] - Tema peta, "light" atau "dark". Default "light".
+     * @param {string} [options.modalMinWidth] - CSS value untuk min-width modal (misalnya, "300px").
+     * @param {string} [options.modalMaxWidth] - CSS value untuk max-width modal (misalnya, "600px").
+     * @param {string} [options.modalMinHeight] - CSS value untuk min-height modal.
+     * @param {string} [options.modalMaxHeight] - CSS value untuk max-height modal.
+     * @returns {Promise} - Promise yang resolve dengan koordinat terpilih atau reject jika modal ditutup.
      */
     showModal: function(options) {
       return new Promise(function(resolve, reject) {
-        // Validasi parameter
+        // Validasi parameter wajib
         if (!options || !options.mapboxAccessToken) {
           reject(new Error('mapboxAccessToken harus disediakan dalam options.'));
           return;
         }
         var defaultLocation = options.defaultLocation || { lng: 106.816666, lat: -6.200000 };
-
+        var titleText = options.title || "Pilih Lokasi";
+        var saveButtonText = options.saveButtonText || "Simpan Lokasi";
+        var hintText = options.hintText || "Klik di peta atau geser marker untuk memilih lokasi";
+        var mapTheme = options.mapTheme || "light"; // "light" atau "dark"
+        var modalMinWidth = options.modalMinWidth || null;
+        var modalMaxWidth = options.modalMaxWidth || null;
+        var modalMinHeight = options.modalMinHeight || null;
+        var modalMaxHeight = options.modalMaxHeight || null;
+  
+        // Tentukan style peta berdasarkan tema
+        var mapStyle = mapTheme === "dark" ? "mapbox://styles/mapbox/dark-v10" : "mapbox://styles/mapbox/streets-v11";
+  
         // Set token Mapbox
         mapboxgl.accessToken = options.mapboxAccessToken;
-
-        // Sisipkan style khusus library (hanya sekali)
+  
+        // Sisipkan style default library (hanya sekali)
         if (!document.getElementById('mlp-styles')) {
           var style = document.createElement('style');
           style.id = 'mlp-styles';
@@ -52,21 +71,26 @@
             "#mlp-save:hover { background-color: #218838; }";
           document.head.appendChild(style);
         }
-
+  
         // Buat elemen modal
         var modal = document.createElement('div');
         modal.className = 'mlp-modal';
         modal.id = 'mlp-modal';
-
+  
         // Buat konten modal
         var modalContent = document.createElement('div');
         modalContent.className = 'mlp-modal-content';
-
+        // Terapkan opsi ukuran jika disediakan
+        if (modalMinWidth) { modalContent.style.minWidth = modalMinWidth; }
+        if (modalMaxWidth) { modalContent.style.maxWidth = modalMaxWidth; }
+        if (modalMinHeight) { modalContent.style.minHeight = modalMinHeight; }
+        if (modalMaxHeight) { modalContent.style.maxHeight = modalMaxHeight; }
+  
         // Header modal
         var modalHeader = document.createElement('div');
         modalHeader.className = 'mlp-modal-header';
-        modalHeader.innerHTML = '<h2>Pilih Lokasi</h2><span class="mlp-close" id="mlp-close">&times;</span>';
-
+        modalHeader.innerHTML = '<h2>' + titleText + '</h2><span class="mlp-close" id="mlp-close">&times;</span>';
+  
         // Body modal
         var modalBody = document.createElement('div');
         modalBody.className = 'mlp-modal-body';
@@ -77,54 +101,54 @@
         mapDiv.className = 'mlp-map';
         var mapHint = document.createElement('div');
         mapHint.className = 'mlp-map-hint';
-        mapHint.innerText = 'Klik di peta atau geser marker untuk memilih lokasi';
+        mapHint.innerText = hintText;
         mapContainer.appendChild(mapDiv);
         mapContainer.appendChild(mapHint);
         modalBody.appendChild(mapContainer);
-
+  
         // Footer modal
         var modalFooter = document.createElement('div');
         modalFooter.className = 'mlp-modal-footer';
         var saveButton = document.createElement('button');
         saveButton.id = 'mlp-save';
-        saveButton.innerText = 'Simpan Lokasi';
+        saveButton.innerText = saveButtonText;
         modalFooter.appendChild(saveButton);
-
+  
         // Gabungkan bagian-bagian modal
         modalContent.appendChild(modalHeader);
         modalContent.appendChild(modalBody);
         modalContent.appendChild(modalFooter);
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
-
+  
         // Variabel untuk map, marker, dan koordinat terpilih
         var map, marker;
-        var selectedCoords = defaultLocation; // Koordinat awal
-
-        // Inisialisasi Mapbox map
+        var selectedCoords = defaultLocation;
+  
+        // Inisialisasi Mapbox map dengan tema yang dipilih
         map = new mapboxgl.Map({
           container: 'mlp-map',
-          style: 'mapbox://styles/mapbox/streets-v11',
+          style: mapStyle,
           center: [defaultLocation.lng, defaultLocation.lat],
           zoom: 12
         });
-
-        // Tambahkan marker yang bisa digeser
+  
+        // Tambahkan marker yang dapat digeser
         marker = new mapboxgl.Marker({ draggable: true })
           .setLngLat([defaultLocation.lng, defaultLocation.lat])
           .addTo(map);
-
+  
         // Update koordinat saat marker diseret
         marker.on('dragend', function() {
           selectedCoords = marker.getLngLat();
         });
-
+  
         // Update posisi marker dan koordinat saat peta diklik
         map.on('click', function(e) {
           marker.setLngLat(e.lngLat);
           selectedCoords = e.lngLat;
         });
-
+  
         // Fungsi untuk membersihkan modal dan instance map
         function cleanup() {
           if (modal && modal.parentNode) {
@@ -134,14 +158,14 @@
             map.remove();
           }
         }
-
+  
         // Event listener tombol tutup modal
         var closeBtn = document.getElementById('mlp-close');
         closeBtn.addEventListener('click', function() {
           cleanup();
           reject(new Error('Modal ditutup tanpa menyimpan'));
         });
-
+  
         // Tutup modal jika klik di luar konten modal
         modal.addEventListener('click', function(e) {
           if (e.target === modal) {
@@ -149,7 +173,7 @@
             reject(new Error('Modal ditutup tanpa menyimpan'));
           }
         });
-
+  
         // Event listener tombol simpan lokasi
         saveButton.addEventListener('click', function() {
           cleanup();
@@ -158,7 +182,7 @@
       });
     }
   };
-
+  
   // Ekspor library ke ruang lingkup global
   window.MapLocationPicker = MapLocationPicker;
 })(window, document);
